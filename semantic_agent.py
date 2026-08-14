@@ -2,16 +2,15 @@ import spacy
 from transformers import pipeline
 
 
-# Safe load/download for spaCy (md preferred for word-vector similarity, sm fallback)
+# Safe load for spaCy (md preferred for word-vector similarity, sm fallback)
+# NOTE: Models are installed via requirements.txt so they ship with the build.
+# A runtime pip install is NOT attempted here — the Streamlit Cloud runtime
+# venv is read-only and would fail with a Permission denied error.
 try:
     nlp = spacy.load("en_core_web_md")
 except OSError:
-    from spacy.cli import download
-    try:
-        download("en_core_web_md")
-        nlp = spacy.load("en_core_web_md")
-    except OSError:
-        nlp = spacy.load("en_core_web_sm")
+    nlp = spacy.load("en_core_web_sm")
+    print("SemanticAgent: en_core_web_md not found, fell back to en_core_web_sm")
 
 
 FAST_ANCHORS = ("quick", "rapid", "swift", "speedy", "rush", "sprint", "dash")

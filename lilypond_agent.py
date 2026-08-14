@@ -9,6 +9,13 @@ if api_key:
     genai.configure(api_key=api_key)
 
 
+def set_api_key(key: str) -> None:
+    """Override the Gemini API key used by the agents at runtime."""
+    global api_key
+    api_key = key
+    genai.configure(api_key=key)
+
+
 
 
 SKELETON = """
@@ -113,12 +120,10 @@ class LilypondAgent:
         """
 
 
-
         model = genai.GenerativeModel("gemini-2.5-flash")
         response = model.generate_content(prompt)
         output = response.text.strip()
         
-
 
 
         # Strip code blocks if returned
@@ -130,6 +135,7 @@ class LilypondAgent:
                 lines = lines[:-1]
             output = "\n".join(lines).strip()
             
+
         # Sanitize dynamics: `\dynamic f` is invalid; convert to `\f` marks
         dynamic_marks = {"ppp": "\\ppp", "pp": "\\pp", "p": "\\p", "mp": "\\mp",
                          "mf": "\\mf", "f": "\\f", "ff": "\\ff", "fff": "\\fff"}
