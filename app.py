@@ -4,10 +4,10 @@ import json
 from semantic_agent import SemanticAgent
 from musical_agent import MusicalInterpretationAgent
 from composition_agent import CompositionAgent
-from lilypond_agent import LilypondAgent
+from lilypond_agent import LilypondAgent, set_api_key
 from music_compiler import MusicCompiler
 
-st.set_page_config(page_title="Multi-Agent Semantic Music Generator", layout="wide")
+st.set_page_config(page_title="Circle of Fifths", layout="wide")
 
 # Initialize Pipeline Agents
 semantic_agent = SemanticAgent()
@@ -24,7 +24,7 @@ PRESETS = {
     "Joyous Morning Poetry": "Golden rays paint the laughing morning dew, sailing high over emerald meadows with a heart bursting with spring melodies."
 }
 
-st.title("🎵 Multi-Agent Semantic Music Score Generator")
+st.title("🎵 Circle of Fifths: A Multi-Agent Semantic Music Score Generator")
 st.write("Each pipeline block processes your text into a distinct, verifiable JSON format before generating the final score.")
 
 # ----------------- SIDEBAR OPTIONS -----------------
@@ -40,6 +40,17 @@ selected_instruments = st.sidebar.multiselect(
     default=["Violin", "Cello"]
 )
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔑 Gemini API Key")
+env_api_key = os.getenv("GEMINI_API_KEY", "")
+
+gemini_api_key = st.sidebar.text_input( #dont bother trying to steal the API key, its free and public lol
+    "API Key (overrides .env)",
+    value=env_api_key,
+    type="password",
+    help="Type a new key here to override it, and no point in stealing it, it's free and public."
+)
+
 # ----------------- MAIN PIPELINE UI -----------------
 user_text = st.text_area("1. Input Semantic Text / Poem:", value=default_text, height=120)
 
@@ -47,6 +58,12 @@ if st.button("🚀 Execute Pipeline Step-by-Step"):
     if not user_text.strip():
         st.error("Please enter semantic text or select a poetry preset.")
     else:
+        active_api_key = gemini_api_key.strip() or env_api_key
+        if active_api_key:
+            set_api_key(active_api_key)
+        else:
+            st.error("No Gemini API key found. Set GEMINI_API_KEY in your .env file or enter one in the sidebar.")
+            st.stop()
         # Create visual workspace division
         tabs = st.tabs([
             "🔍 Step 1: Semantics", 
