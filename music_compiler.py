@@ -39,7 +39,7 @@ class MusicCompiler:
         try:
             # Invoke system LilyPond compiler [1]
             result = subprocess.run(
-                ["lilypond", "-o", base_path, ly_path],
+                ["lilypond", "-dmidi-extension=mid", "-o", base_path, ly_path],
                 check=True,
                 capture_output=True,
                 text=True
@@ -101,6 +101,6 @@ class MusicCompiler:
         """
         Synthesizes the MIDI file into a browser-playable WAV file.
         """
-        wav_path = midi_path.replace(".mid", ".wav")
+        wav_path = os.path.splitext(midi_path)[0] + ".wav"
         midi_to_wav(midi_path, wav_path)
         return wav_path
