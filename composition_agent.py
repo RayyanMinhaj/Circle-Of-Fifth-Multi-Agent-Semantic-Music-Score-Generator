@@ -3,6 +3,8 @@ class CompositionAgent:
     Agent 3: Converts musical parameters into specific pitches, motifs, chords, and bars.
     The score length scales with the poem's word count, and each bar is filled with
     a rhythmically varied pattern (beamed eighths/sixteenths, dotted notes, rests).
+    Every instrument receives its own distinct part: the lead melody, an octave or
+    harmonic doubling, or a chord-tone accompaniment, so no two voices are identical.
     """
 
     DURATION_CODE = {0.25: "16", 0.5: "8", 1: "4", 1.5: "4.", 2: "2", 3: "2."}
@@ -182,25 +184,60 @@ class CompositionAgent:
             ptr += n
             chord = bar_chords[bar]
 
-            # Insert a breathing rest at phrase boundaries (every 4th bar)
-            rhythm = list(zip(bar_melody, cell))
-            if (bar + 1) % 4 == 0:
-                last_pitch, last_dur = rhythm[-1]
-                rhythm[-1] = ("r", last_dur)
+            # Breathing rest at phrase boundaries (every 4th bar), shared by all voices
+            rest_this_bar = (bar + 1) % 4 == 0
 
-            melody_tokens = self._beamify(list(rhythm))
+            def with_breath(pairs):
+                pairs = list(pairs)
+                if rest_this_bar:
+                    last_pitch, last_dur = pairs[-1]
+                    pairs[-1] = ("r", last_dur)
+                return pairs
+
+            def harmonize(offset):
+                return self._beamify(with_breath(zip(
+                    [scale[(i + offset) % len(scale)] for i in bar_indices], cell)))
+
+            melody_tokens = self._beamify(with_breath(zip(bar_melody, cell)))
 
             voices = {}
             for inst in instrumentation:
                 inst_lower = inst.lower()
 
                 if inst_lower in ["violin", "flute", "clarinet", "oboe"]:
-                    voices[inst] = melody_tokens
+                    if inst_lower == "violin":
+                        # Lead voice: the melody itself
+                        voices[inst] = melody_tokens
+
+                    elif inst_lower == "flute":
+                        # Octave doubling above the lead (classic colour doubling)
+                        voices[inst] = self._beamify(with_breath(zip(
+                            [p + "'" for p in bar_melody], cell)))
+
+                    elif inst_lower == "clarinet":
+                        # Harmonic doubling a diatonic 3rd below the lead
+                        voices[inst] = harmonize(-2)
+
+                    elif inst_lower == "oboe":
+                        # Harmonic doubling a diatonic 3rd above the lead
+                        voices[inst] = harmonize(2)
 
                 elif inst_lower in ["cello", "viola", "double bass"]:
-                    root = chord[bar % len(chord)].replace("'", "") + ","
-                    fifth = chord[(bar + 1) % len(chord)].replace("'", "") + ","
-                    voices[inst] = [f"{root}2", f"{fifth}2"]
+                    root = chord[0].replace("'", "") + ","
+                    third = chord[1].replace("'", "") + ","
+                    fifth = chord[2].replace("'", "") + ","
+
+                    if inst_lower == "cello":
+                        # Broken-chord arpeggio: root - fifth - third - root
+                        voices[inst] = [f"{root}4", f"{fifth}4", f"{third}4", f"{root}4"]
+
+                    elif inst_lower == "viola":
+                        # Sustained root and fifth
+                        voices[inst] = [f"{root}2", f"{fifth}2"]
+
+                    elif inst_lower == "double bass":
+                        # Long pedal on the root
+                        voices[inst] = [f"{root}1"]
 
                 elif inst_lower == "piano":
                     voices[inst] = {
