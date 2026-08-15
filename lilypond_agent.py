@@ -79,12 +79,18 @@ class LilypondAgent:
     """
     Agent 4: Takes all compiled JSON results and requests syntax-valid LilyPond markup from Gemini.
     """
-    def generate(self, semantic: dict, musical: dict, composition: dict) -> str:
+    def generate(self, semantic: dict, musical: dict, composition: dict, feedback: str = None) -> str:
         if not api_key:
             raise ValueError("GEMINI_API_KEY not found in environmental context.")
             
 
-
+        feedback_block = ""
+        if feedback:
+            feedback_block = f"""
+        ### Previous Compilation Feedback:
+        The previous LilyPond output FAILED to compile. Fix every reported error below and return corrected, valid output:
+        {feedback}
+        """
         consolidated_payload = {
             "semantic_analysis": semantic,
             "musical_interpretation": musical,
@@ -103,14 +109,16 @@ class LilypondAgent:
         {json.dumps(consolidated_payload, indent=2)}
 
         ### Rules & Formatting Requirements:
-        1. Create a dedicated `\\new Staff` structure for each instrument listed under `musical_interpretation.instrumentation`.
+        1. Create a dedicated `\new Staff` structure for each instrument listed under `musical_interpretation.instrumentation`.
         2. Apply matching clefs to each instrument (e.g., Violin/Flute gets treble clef, Cello/Double Bass gets bass clef).
-        3. If Piano is present, render it as a standard `\\new PianoStaff` split into two distinct staff voices.
-        4. Incorporate the tempo, key, time signature, and initial dynamics provided. Dynamics MUST use LilyPond dynamic marks such as `\\f`, `\\p`, `\\mp`, `\\mf`, or `\\ff` written directly after a note (e.g., `c''2\\f`). NEVER write `\\dynamic f` or any `\\dynamic` command — that syntax is invalid.
+        3. If Piano is present, render it as a standard `\new PianoStaff << \new Staff {{ ... }} \new Staff {{ ... }} >>`. The two inner staves MUST be plain `\new Staff {{ ... }}` — never pass a name string to `\new Staff`. Writing `\new Staff "upper"` or `\new Staff "lower"` is INVALID LilyPond syntax and will fail to compile. To label a staff, use `\new Staff \with {{ instrumentName = #"Name" }}` or `\new Staff = "alias"`.
+        4. Incorporate the tempo, key, time signature, and initial dynamics provided. Dynamics MUST use LilyPond dynamic marks such as `\f`, `\p`, `\mp`, `\mf`, or `\ff` attached DIRECTLY after a note (e.g., `c''2\f`). NEVER write `\dynamic f` or any `\dynamic` command, and NEVER place a dynamic mark on its own line or in an empty voice — that produces an unattached dynamic warning.
         5. Ensure every bar contains the correct total duration for the time signature so bar checks pass.
-        6. Render the EXACT note tokens provided in `composition_structure.measures` for every instrument (melody, chord, and bass lines). Each token already contains a LilyPond pitch AND duration (e.g., `c'4`, `d'8[ fis'8]`, `a'2.`, `r8`). Copy them verbatim — do NOT change, normalize, or invent durations, and do NOT transpose pitches.
+        6. Render the EXACT note tokens provided in `composition_structure.measures` for every instrument (melody, chord, and bass lines). Each token already contains a LilyPond pitch AND duration (e.g., `c'4`, `d'8[ fis'8]`, `a'2.`, `r8`). Copy them verbatim — do NOT change, normalize, or invent durations, and do NOT transpose pitches. Every instrument already has its own distinct line (different registers/harmonies); preserve those differences and never collapse two instruments into identical unison staves.
         7. The score MUST contain exactly `{total_measures}` bars (`composition_structure.total_measures`). Do not expand, repeat, double, or add extra measures under any circumstance — render every bar from `measures` once, in order.
-        8. Return ONLY executable LilyPond markup. Do not wrap the response in markdown blocks (e.g., do not use ```lilypond tags).
+        8. Return ONLY executable LilyPond markup. Do not wrap the response in markdown blocks (e.g., do not use ```lilypond tags) and do not include a `\version` line.
+
+        {feedback_block}
 
         ### Structural LilyPond Skeleton:
         {SKELETON}
@@ -144,5 +152,8 @@ class LilypondAgent:
                         lambda m: dynamic_marks.get(m.group(1), "\\mf"),
                         output)
         output = re.sub(r"\\dynamic", lambda m: "\\mf", output)
+
+        # Sanitize invalid bare-string context names, e.g. `\new Staff "upper" {`
+        output = re.sub(r'\\new\s+(Staff|PianoStaff|Voice)\s+"[^"]*"', r'\\new \1', output)
             
         return output

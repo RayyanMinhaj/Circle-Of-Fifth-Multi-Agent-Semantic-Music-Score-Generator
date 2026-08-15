@@ -105,32 +105,41 @@ if st.button("🚀 Execute Pipeline Step-by-Step"):
                 try:
                     # Request score layout from the model
                     ly_code = lilypond_agent.generate(semantic_json, musical_json, composition_json)
-                    
-                    with st.expander("📄 View Compiled LilyPond Code"):
-                        st.code(ly_code, language="lilypond")
-                    
+
                     # Compile using system LilyPond
                     with st.spinner("Compiling MIDI and PDF files..."):
                         compilation = compiler.compile(ly_code)
+
+                        # Retry once, feeding the compiler error back to the model
+                        if not compilation["success"]:
+                            with st.spinner("Fixing LilyPond errors and recompiling..."):
+                                ly_code = lilypond_agent.generate(
+                                    semantic_json, musical_json, composition_json,
+                                    feedback=compilation["error"]
+                                )
+                            compilation = compiler.compile(ly_code)
+
+                    with st.expander("📄 View Compiled LilyPond Code"):
+                        st.code(ly_code, language="lilypond")
+                    
+                    if compilation["success"]:
+                        # Render visual PDF preview
+                        score_image = compiler.render_pdf_to_image(compilation["pdf"])
+                        st.image(score_image, caption="Synthesized Score Preview", use_container_width=True)
                         
-                        if compilation["success"]:
-                            # Render visual PDF preview
-                            score_image = compiler.render_pdf_to_image(compilation["pdf"])
-                            st.image(score_image, caption="Synthesized Score Preview", use_container_width=True)
-                            
-                            # Handle files & downloads
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                with open(compilation["pdf"], "rb") as f:
-                                    st.download_button("📄 Download PDF Score", f, "composition.pdf", "application/pdf")
-                            with col2:
-                                with st.spinner("Synthesizing audio..."):
-                                    wav_path = compiler.midi_to_wav(compilation["midi"])
-                                with open(wav_path, "rb") as f:
-                                    st.audio(f.read(), format="audio/wav")
-                        else:
-                            st.error("Score rendering failed. See error log below:")
-                            st.code(compilation["error"])
-                            
+                        # Handle files & downloads
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            with open(compilation["pdf"], "rb") as f:
+                                st.download_button("📄 Download PDF Score", f, "composition.pdf", "application/pdf")
+                        with col2:
+                            with st.spinner("Synthesizing audio..."):
+                                wav_path = compiler.midi_to_wav(compilation["midi"])
+                            with open(wav_path, "rb") as f:
+                                st.audio(f.read(), format="audio/wav")
+                    else:
+                        st.error("Score rendering failed. See error log below:")
+                        st.code(compilation["error"])
+                        
                 except Exception as e:
                     st.error(f"Error executing agent task: {e}")
