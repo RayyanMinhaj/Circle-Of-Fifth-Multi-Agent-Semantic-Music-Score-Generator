@@ -69,6 +69,53 @@ arousal_slider = st.sidebar.slider(
 )
 
 st.sidebar.markdown("---")
+st.sidebar.subheader("🎼 Musical Parameters Override")
+manual_music = st.sidebar.checkbox(
+    "Override with my settings",
+    value=False,
+    help="When enabled, the controls below overwrite the auto-mapped musical parameters from Step 2.",
+)
+tempo_input = st.sidebar.number_input(
+    "Tempo (BPM)",
+    min_value=40,
+    max_value=208,
+    value=100,
+    step=2,
+    disabled=not manual_music,
+    help="Speed of the beat. Written into the LilyPond tempo mark.",
+)
+key_input = st.sidebar.selectbox(
+    "Key",
+    ["C major", "G major", "D major", "F major", "A minor", "D minor", "E minor", "G minor"],
+    index=0,
+    disabled=not manual_music,
+    help="Root key and mode used for scales and chord choices.",
+)
+dynamics_input = st.sidebar.selectbox(
+    "Dynamics",
+    ["p", "mp", "mf", "f", "ff"],
+    index=3,
+    disabled=not manual_music,
+    help="Overall loudness marking placed on the score.",
+)
+articulation_input = st.sidebar.selectbox(
+    "Articulation",
+    ["legato", "tenuto", "staccato"],
+    index=0,
+    disabled=not manual_music,
+    help="How notes are played. Passed to the LilyPond renderer.",
+)
+density_input = st.sidebar.slider(
+    "Density",
+    min_value=0.1,
+    max_value=1.0,
+    value=0.5,
+    step=0.05,
+    disabled=not manual_music,
+    help="Note density: higher values pick busier rhythm cells.",
+)
+
+st.sidebar.markdown("---")
 st.sidebar.subheader("🔑 Gemini API Key")
 env_api_key = os.getenv("GEMINI_API_KEY", "")
 
@@ -117,6 +164,14 @@ if st.button("🚀 Execute Pipeline Step-by-Step"):
             st.subheader("Musical Parameter Mapping")
             with st.spinner("Translating elements..."):
                 musical_json = musical_agent.translate(semantic_json, selected_instruments)
+                if manual_music:
+                    musical_json["tempo"] = int(tempo_input)
+                    musical_json["key"] = key_input
+                    musical_json["mode"] = "major" if "major" in key_input else "minor"
+                    musical_json["dynamics"] = dynamics_input
+                    musical_json["articulation"] = articulation_input
+                    musical_json["density"] = density_input
+                    st.info("Musical parameters overwritten by the sidebar.")
                 st.json(musical_json)
                 st.success("Step 2 Complete: Translated semantics to musical attributes.")
 
