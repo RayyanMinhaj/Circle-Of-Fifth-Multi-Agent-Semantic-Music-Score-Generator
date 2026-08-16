@@ -43,6 +43,32 @@ selected_instruments = st.sidebar.multiselect(
 )
 
 st.sidebar.markdown("---")
+st.sidebar.subheader("🎚️ Emotion Override")
+manual_emotion = st.sidebar.checkbox(
+    "Manually set valence & arousal",
+    value=False,
+    help="When enabled, the sliders below overwrite the NLP-computed valence/arousal from Step 1 before they reach the musical translation."
+)
+valence_slider = st.sidebar.slider(
+    "Valence (negative ↔ positive)",
+    min_value=0.0,
+    max_value=1.0,
+    value=0.5,
+    step=0.05,
+    disabled=not manual_emotion,
+    help="Lower = minor/sad key, higher = major/joyful key."
+)
+arousal_slider = st.sidebar.slider(
+    "Arousal (calm ↔ energetic)",
+    min_value=0.0,
+    max_value=1.0,
+    value=0.5,
+    step=0.05,
+    disabled=not manual_emotion,
+    help="Higher = faster tempo, louder dynamics, denser rhythm."
+)
+
+st.sidebar.markdown("---")
 st.sidebar.subheader("🔑 Gemini API Key")
 env_api_key = os.getenv("GEMINI_API_KEY", "")
 
@@ -79,6 +105,10 @@ if st.button("🚀 Execute Pipeline Step-by-Step"):
             st.subheader("Semantic Extraction (NLP Models)")
             with st.spinner("Extracting parameters..."):
                 semantic_json = semantic_agent.analyze(user_text)
+                if manual_emotion:
+                    semantic_json["emotion"]["valence"] = valence_slider
+                    semantic_json["emotion"]["arousal"] = arousal_slider
+                    st.info("Emotion values overwritten by sidebar sliders.")
                 st.json(semantic_json)
                 st.success("Step 1 Complete: Captured semantic values.")
 
@@ -105,41 +135,32 @@ if st.button("🚀 Execute Pipeline Step-by-Step"):
                 try:
                     # Request score layout from the model
                     ly_code = lilypond_agent.generate(semantic_json, musical_json, composition_json)
-
-                    # Compile using system LilyPond
-                    with st.spinner("Compiling MIDI and PDF files..."):
-                        compilation = compiler.compile(ly_code)
-
-                        # Retry once, feeding the compiler error back to the model
-                        if not compilation["success"]:
-                            with st.spinner("Fixing LilyPond errors and recompiling..."):
-                                ly_code = lilypond_agent.generate(
-                                    semantic_json, musical_json, composition_json,
-                                    feedback=compilation["error"]
-                                )
-                            compilation = compiler.compile(ly_code)
-
+                    
                     with st.expander("📄 View Compiled LilyPond Code"):
                         st.code(ly_code, language="lilypond")
                     
-                    if compilation["success"]:
-                        # Render visual PDF preview
-                        score_image = compiler.render_pdf_to_image(compilation["pdf"])
-                        st.image(score_image, caption="Synthesized Score Preview", use_container_width=True)
+                    # Compile using system LilyPond
+                    with st.spinner("Compiling MIDI and PDF files..."):
+                        compilation = compiler.compile(ly_code)
                         
-                        # Handle files & downloads
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            with open(compilation["pdf"], "rb") as f:
-                                st.download_button("📄 Download PDF Score", f, "composition.pdf", "application/pdf")
-                        with col2:
-                            with st.spinner("Synthesizing audio..."):
-                                wav_path = compiler.midi_to_wav(compilation["midi"])
-                            with open(wav_path, "rb") as f:
-                                st.audio(f.read(), format="audio/wav")
-                    else:
-                        st.error("Score rendering failed. See error log below:")
-                        st.code(compilation["error"])
-                        
+                        if compilation["success"]:
+                            # Render visual PDF preview
+                            score_image = compiler.render_pdf_to_image(compilation["pdf"])
+                            st.image(score_image, caption="Synthesized Score Preview", use_container_width=True)
+                            
+                            # Handle files & downloads
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                with open(compilation["pdf"], "rb") as f:
+                                    st.download_button("📄 Download PDF Score", f, "composition.pdf", "application/pdf")
+                            with col2:
+                                with st.spinner("Synthesizing audio..."):
+                                    wav_path = compiler.midi_to_wav(compilation["midi"])
+                                with open(wav_path, "rb") as f:
+                                    st.audio(f.read(), format="audio/wav")
+                        else:
+                            st.error("Score rendering failed. See error log below:")
+                            st.code(compilation["error"])
+                            
                 except Exception as e:
                     st.error(f"Error executing agent task: {e}")
